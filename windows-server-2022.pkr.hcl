@@ -81,17 +81,6 @@ build {
   name    = "windows-2022-devops-agent"
   sources = ["source.azure-arm.windows2022"]
 
-  # Install Chocolatey
-  provisioner "powershell" {
-    inline = [
-      "$ProgressPreference = 'SilentlyContinue'",
-      "Set-ExecutionPolicy Bypass -Scope Process -Force",
-      "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072",
-      "iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))",
-      "choco feature enable -n allowGlobalConfirmation"
-    ]
-  }
-
   # Install Google Chrome
   provisioner "powershell" {
     inline = [
