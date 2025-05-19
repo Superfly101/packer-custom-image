@@ -81,7 +81,7 @@ build {
   name    = "windows-2022-devops-agent"
   sources = ["source.azure-arm.windows2022"]
 
-# Install Chocolatey
+  # Install Chocolatey
   provisioner "powershell" {
     inline = [
       "$ProgressPreference = 'SilentlyContinue'",
