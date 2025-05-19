@@ -92,17 +92,13 @@ build {
     ]
   }
 
-  # Install Google Chrome using Chocolatey
+  # Install Google Chrome
   provisioner "powershell" {
     inline = [
-      "choco install googlechrome -y"
-    ]
-  }
-
-  provisioner "powershell" {
-    inline = [
-      "choco install git -y",
-      "choco install 7zip -y"
+      "$ProgressPreference = 'SilentlyContinue'",
+      "Invoke-WebRequest -Uri 'https://dl.google.com/chrome/install/latest/chrome_installer.exe' -OutFile 'C:\\chrome_installer.exe'",
+      "Start-Process -FilePath 'C:\\chrome_installer.exe' -Args '/silent /install' -Wait",
+      "Remove-Item 'C:\\chrome_installer.exe'"
     ]
   }
 
