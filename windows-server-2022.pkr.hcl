@@ -1,0 +1,138 @@
+packer {
+  required_plugins {
+    azure = {
+      source  = "github.com/hashicorp/azure"
+      version = "~> 2"
+    }
+  }
+}
+
+variable "client_id" {
+  type = string
+  description = "Azure Service Principal App ID"
+}
+
+variable "client_secret" {
+  type = string
+  description = "Azure Service Principal Secret"
+  sensitive = true
+}
+
+variable "subscription_id" {
+  type = string
+  description = "Azure Subscription ID"
+}
+
+variable "tenant_id" {
+  type = string
+  description = "Azure Tenant ID"
+}
+
+variable "resource_group" {
+  type = string
+  description = "Resource group to build in and save the image"
+}
+
+variable "location" {
+  type = string
+  default = "East US"
+  description = "Azure region to build the image in"
+}
+
+variable "image_name" {
+  type = string
+  default = "win2022-devops-agent"
+  description = "Name for the output managed image"
+}
+
+variable "image_version" {
+  type = string
+  default = "1.0.0"
+  description = "Version of the image"
+}
+
+# Define the source for the build
+source "azure-arm" "windows2022" {
+  client_id                         = var.client_id
+  client_secret                     = var.client_secret
+  subscription_id                   = var.subscription_id
+  tenant_id                         = var.tenant_id
+
+  managed_image_resource_group_name = var.resource_group
+  managed_image_name                = "${var.image_name}-${var.image_version}"
+  
+  os_type                           = "Windows"
+  image_publisher                   = "MicrosoftWindowsServer"
+  image_offer                       = "WindowsServer"
+  image_sku                         = "2022-Datacenter"
+
+  communicator                      = "winrm"
+  winrm_use_ssl                     = true
+  winrm_insecure                    = true
+  winrm_timeout                     = "5m"
+  winrm_username                    = "packer"
+
+  location                          = var.location
+  vm_size                           = "Standard_D2_v3"
+}
+
+# Build definition
+build {
+  name = "windows-2022-devops-agent"
+  sources = ["source.azure-arm.windows2022"]
+
+  # Install Google Chrome
+  provisioner "powershell" {
+    inline = [
+      "$ProgressPreference = 'SilentlyContinue'",
+      "Invoke-WebRequest -Uri 'https://dl.google.com/chrome/install/latest/chrome_installer.exe' -OutFile 'C:\\chrome_installer.exe'",
+      "Start-Process -FilePath 'C:\\chrome_installer.exe' -Args '/silent /install' -Wait",
+      "Remove-Item 'C:\\chrome_installer.exe'"
+    ]
+  }
+
+  # Run Windows Update
+  provisioner "powershell" {
+    inline = [
+      "$ProgressPreference = 'SilentlyContinue'",
+      "Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force",
+      "Install-Module PSWindowsUpdate -Force",
+      "Import-Module PSWindowsUpdate",
+      "Get-WindowsUpdate",
+      "Install-WindowsUpdate -AcceptAll -AutoReboot | Out-File C:\\Windows\\Temp\\WindowsUpdate.log"
+    ]
+  }
+
+  # Install PowerShell 7 (Optional but recommended for DevOps agents)
+  provisioner "powershell" {
+    inline = [
+      "$ProgressPreference = 'SilentlyContinue'",
+      "Invoke-WebRequest -Uri https://github.com/PowerShell/PowerShell/releases/download/v7.3.4/PowerShell-7.3.4-win-x64.msi -OutFile C:\\PowerShell.msi",
+      "Start-Process -FilePath msiexec.exe -ArgumentList '/i C:\\PowerShell.msi /quiet /norestart' -Wait",
+      "Remove-Item -Path C:\\PowerShell.msi"
+    ]
+  }
+
+  # Azure DevOps specific optimizations
+  provisioner "powershell" {
+    inline = [
+      # Disable Windows Defender for performance (Optional - consider security implications)
+      "Set-MpPreference -DisableRealtimeMonitoring $true",
+      
+      # Optimize for better performance as a build agent
+      "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server' -Name 'fDenyTSConnections' -Value 0",
+      "Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'",
+      
+      # Enable PowerShell Remoting
+      "Enable-PSRemoting -Force"
+    ]
+  }
+
+  # Sysprep the VM for deployment
+  provisioner "powershell" {
+    inline = [
+      "& $env:SystemRoot\\System32\\Sysprep\\Sysprep.exe /oobe /generalize /quiet /quit",
+      "while($true) { $imageState = Get-ItemProperty HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Setup\\State | Select ImageState; if($imageState.ImageState -ne 'IMAGE_STATE_GENERALIZE_RESEAL_TO_OOBE') { Write-Output $imageState.ImageState; Start-Sleep -s 10 } else { break } }"
+    ]
+  }
+}
